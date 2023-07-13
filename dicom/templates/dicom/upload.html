@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}Upload DICOM{% endblock %}</h1>
+  {% if g.user %}
+    <a class="action" href="{{ url_for('dicom.index') }}">Main</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <form method="post" enctype="multipart/form-data">
+    <input type="file" name="file" multiple />
+    <input type="submit" value="Upload">
+  </form>
+{% endblock %}

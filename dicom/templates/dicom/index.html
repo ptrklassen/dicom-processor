@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}RT Structure Sets{% endblock %}</h1>
+  {% if g.user %}
+    <a class="action" href="{{ url_for('dicom.upload_file') }}">Add file</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% for rt_set in rt_sets %}
+    <article class="post">
+      <header>
+        <div>
+          <h1>Patient ID: {{ rt_set['patient_id'] }}</h1>
+          <div class="about">Study Instance UID: {{ rt_set['study'] }} <br>
+            Series Instance ID: {{ rt_set['series'] }}
+            </div>
+        </div>
+        <a class="action" href="{{ url_for('dicom.list_file', id=rt_set['id']) }}">View File</a>
+      </header>
+      <p class="body">Organ: Heart Volume: 15cc Number of files: 45 </p>
+    </article>
+    {% if not loop.last %}
+      <hr>
+    {% endif %}
+  {% endfor %}
+{% endblock %}

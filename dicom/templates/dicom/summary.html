@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}Upload Summary{% endblock %}</h1>
+  {% if g.user %}
+    <a class="action" href="{{ url_for('dicom.index') }}">Main</a>
+    <a class="action" href="{{ url_for('dicom.upload_file') }}">Add file</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<h4>{{ count }} files processed</h4>
+  {% for file in files %}
+    <article class="post">
+      <header>
+        <div>
+          <h1>{{ file[0] }}</h1>
+          <div class="about">Patient: {{ file[1] }}</div>
+        </div>
+      </header>
+    </article>
+    {% if not loop.last %}
+      <hr>
+    {% endif %}
+  {% endfor %}
+{% endblock %}
