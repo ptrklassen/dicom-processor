@@ -25,73 +25,15 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def process_rt_structure_set(study, series, patient_id, file):
-    # convert the file to binary format
-    # file = convertToBinaryData(file)
-    try:
-        db = get_db()
-        db.execute(
-            'INSERT INTO rt_structure_set (study, series, patient_id, dicom_file)'
-            ' VALUES (?, ?, ?, ?)',
-            (study, series, patient_id, file)
-        )
-        db.commit()
-    except db.Error as error:
-        # Unique constraint failure is expected and the error is hidden to prevent user confusion
-        if str(error) == "UNIQUE constraint failed: rt_structure_set.study":
-            pass
-        else:
-            flash(error)
-
-def process_image_instance(study, series, patient_id, instance, file):
-    # convert the file to binary format
-    # file = convertToBinaryData(file)
-    try:
-        db = get_db()
-        db.execute(
-            'INSERT INTO image_instance (study, series, patient_id, instance, dicom_file)'
-            ' VALUES (?, ?, ?, ?, ?)',
-            (study, series, patient_id, instance, file)
-        )
-        db.commit()
-    except db.Error as error:
-        # Unique constraint failure is expected and the error is hidden to prevent user confusion
-        if str(error) == "UNIQUE constraint failed: image_instance.instance":
-            pass
-        else:
-            flash(error)
-
-################################################################
-# Function for saving to database
-################################################################
-# def process_file(file, filename):
-#     # read the file and gather the common data points
-#     ds = dcmread(file)
-#     study=ds.StudyInstanceUID
-#     series=ds.SeriesInstanceUID
-#     patient_id=ds.PatientID
-#     if hasattr(ds.file_meta, "MediaStorageSOPClassUID") and ds.file_meta.MediaStorageSOPClassUID == CT_IMAGE:
-#         # image instances are saved with their InstanceNumber
-#         instance = ds.InstanceNumber
-#         process_image_instance(study=study, series=series, patient_id=patient_id, instance=instance, file=file)        
-#         return (f"{filename} is CT Image - Instance: {ds.InstanceNumber}".format(filename=filename), ds)
-#     if hasattr(ds.file_meta, "MediaStorageSOPClassUID") and ds.file_meta.MediaStorageSOPClassUID == RT_STRUCTURE_SET:
-#         process_rt_structure_set(study=study, series=series, patient_id=patient_id, file=file)
-#         return (f"{filename} is RT Structure Set".format(filename=filename), ds)
-
-
-################################################################
-# Function for saving to folders
-################################################################
+# Populate RT_SETS and PIXAL_DATA variables, sort files to folders
+# Return string summary and reader friendly file
 def process_file(file, filename):
-    # read the file and gather the common data points
+    # Read files and gather common data points
     ds = dcmread(file)
     study=ds.StudyInstanceUID
     series=ds.SeriesInstanceUID
     patient_id=ds.PatientID
     if hasattr(ds.file_meta, "MediaStorageSOPClassUID") and ds.file_meta.MediaStorageSOPClassUID == CT_IMAGE:
-        # image instances are saved with their InstanceNumber
-        # instance = ds.InstanceNumber
         PIXEL_DATA.append(
             {
                 "patient": patient_id,
@@ -129,14 +71,15 @@ def upload_file():
         data = request.files
         count = 0
         processed_files = []
-        # check if the post request contains the file part
+        # Check if the post request contains the file part
         if 'file' not in request.files:
                 flash('No file part')
                 return redirect(request.url)
+        flash("Hang in there, this may take a minute!")
         for file in data.getlist('file'):        
             file = file
             count += 1
-            # prevent the user/browser from submitting an empty file without a filename.
+            # Prevent the user/browser from submitting an empty file without a filename.
             if file.filename == '':
                 flash('No file selected')
                 return redirect(request.url)
@@ -149,39 +92,44 @@ def upload_file():
                 
     return render_template('dicom/upload.html')
 
-
-def heart_volume(heart_contures):
-    contour_points = []
-    for contour_data in heart_contures:
+# Accept ROI contour data and convert to pixel volume
+def roi_volume(roi_contours):
+    contour_areas_stacked = []
+    for contour_data in roi_contours:
+        # Remove z values from contour_data
         del contour_data[3 - 1::3]
-        # x_y_contours = []
-        area_points = []
+        scan_contour_area = []
         for x in contour_data:
             i = contour_data.index(x)
+            # Perform cumulative polyganal area calculation at each area coordinate 
             if i%2 == 0 and i+3 < len(contour_data):
+                # Area = 1/2|(x1y2-x2y1) + (x2y3-x3y2) + ... + (xn-1yn-xnyn-1) + (xny1-x1yn)|
                 result = ((contour_data[i] * contour_data[i+3]) - (contour_data[i+2] * contour_data[i+1]))/2
-                area_points.append(result)
-        
-        contour_points.append(sum(area_points))
-    return sum(contour_points)
+                scan_contour_area.append(result)        
+        contour_areas_stacked.append(sum(scan_contour_area))
+    return sum(contour_areas_stacked)
 
 
 
-#find the index of the heart ROI and return the pixel volume of the heart
+# Find the index of the heart ROI and return the pixel volume of the heart
 def heart_finder(rt_set):
     structure_set = rt_set.StructureSetROISequence
     for roi in structure_set:
         if roi.ROIName == 'HEART':
             heart_index = structure_set.index(roi)
             if heart_index:
+                # Locate the Contour Sequence for the HEART ROI
                 contour_set = rt_set.ROIContourSequence[heart_index]
                 heart_contours = []
+                # Collect contour data from the HEART ROI images
                 for contour_sequence in contour_set.ContourSequence:
                     heart_contours.append(contour_sequence.ContourData)
-                heart_x_y_contours = heart_volume(heart_contours)
+                # Convert contour image's pixel area into pixel volume
+                heart_x_y_contours = roi_volume(heart_contours)
                 return heart_x_y_contours
 
 
+# Calculate the number of images used in the combined ROIs
 def image_counter(rt_set):
     contour_set = rt_set.ROIContourSequence
     number_of_images = 0
@@ -192,12 +140,16 @@ def image_counter(rt_set):
     return number_of_images, all_scans
 
 
+# Multipy heart pixel volume by pixel spacing to aquire volume in cc
 def apply_pixel_data_to_heart_volume():
     for set in RT_SETS:
         if len(set["pixel_spacing"]) == 2 and set["heart"]:
             set["heart"] = set["heart"] * set["pixel_spacing"][0] * set["pixel_spacing"][1] * 0.001
+        # Reduce heart volume to 2 decimals
+        set["heart"] = round(set["heart"], 2)
 
 
+# Collate pixel_spacing from uploaded image scans and provide it to the RT_SETS
 def get_pixel_data():
     for set in RT_SETS:
         set["pixel_spacing"] = []
@@ -211,38 +163,3 @@ def index():
     get_pixel_data()
     apply_pixel_data_to_heart_volume()
     return render_template('dicom/index.html', rt_sets=RT_SETS)
-#     db = get_db()
-#     rt_sets = db.execute(
-#         'SELECT id, study, series, patient_id'
-#         ' FROM rt_structure_set'
-#         ' ORDER BY patient_id'
-#     ).fetchall()
-#     return render_template('dicom/index.html', rt_sets=rt_sets)
-
-
-
-# def get_file(id):
-#     db = get_db()
-#     rt_structure_set = db.execute('SELECT id, dicom_file'
-#         ' FROM rt_structure_set' 
-#         ' WHERE id = ?', 
-#         (id,)
-#     ).fetchone()
-
-#     if rt_structure_set is None:
-#         abort(404, f"RT Structure Set {id} doesn't exist")
-
-#     return rt_structure_set
-
-
-@bp.route('/file/<filename>', methods = ['GET'])
-def list_file(filename):
-    filename = filename
-    print(os.path.join(current_app.config['RT_SET_FOLDER'], filename))
-    file = dcmread(os.path.join(current_app.config['RT_SET_FOLDER'], filename), force=True)
-    print(filename, file)
-    # dicom_file = file['dicom_file']
-    # file.write(dicom_file)
-    # ds = dcmread(dicom_file)
-
-    return render_template('dicom/list_file.html', info=filename, file=file)

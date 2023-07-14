@@ -17,11 +17,8 @@
             Series Instance ID: {{ rt_set['series'] }}
             </div>
         </div>
-        <a class="action" href="{{ url_for('dicom.list_file', filename=rt_set['filename']) }}">View File</a>
       </header>
-      <p class="body">Heart Volume: TBD Number of approved images: {{ rt_set.approved_images }} Total images: {{ rt_set.all_scans }}</p>
-      <p class="body">{{ rt_set.patient }}</p>
-      <p class="body">{{ rt_set.heart }}</p>
+      <p class="body">Heart Volume: {{ rt_set.heart }} <sup>cc</sup> Number of approved images: {{ rt_set.approved_images }} Total images: {{ rt_set.all_scans }}</p>
     </article>
     {% if not loop.last %}
       <hr>
