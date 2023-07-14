@@ -15,6 +15,7 @@ from werkzeug.utils import secure_filename
 ALLOWED_EXTENSIONS = {'dcm'}
 CT_IMAGE = "1.2.840.10008.5.1.4.1.1.2"
 RT_STRUCTURE_SET = "1.2.840.10008.5.1.4.1.1.481.3"
+RT_SETS = []
 
 
 bp = Blueprint('dicom', __name__)
@@ -22,12 +23,6 @@ bp = Blueprint('dicom', __name__)
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# def convertToBinaryData(file):
-    
-#     with open(file, 'rb') as file:
-#         print(file)
-#         blob_data = file.read()
-#     return blob_data
 
 def process_rt_structure_set(study, series, patient_id, file):
     # convert the file to binary format
@@ -90,9 +85,9 @@ def process_image_instance(study, series, patient_id, instance, file):
 def process_file(file, filename):
     # read the file and gather the common data points
     ds = dcmread(file)
-    # study=ds.StudyInstanceUID
-    # series=ds.SeriesInstanceUID
-    # patient_id=ds.PatientID
+    study=ds.StudyInstanceUID
+    series=ds.SeriesInstanceUID
+    patient_id=ds.PatientID
     if hasattr(ds.file_meta, "MediaStorageSOPClassUID") and ds.file_meta.MediaStorageSOPClassUID == CT_IMAGE:
         # image instances are saved with their InstanceNumber
         # instance = ds.InstanceNumber
@@ -100,10 +95,24 @@ def process_file(file, filename):
         return (f"{filename} is CT Image - Instance: {ds.InstanceNumber}".format(filename=filename), ds)
     if hasattr(ds.file_meta, "MediaStorageSOPClassUID") and ds.file_meta.MediaStorageSOPClassUID == RT_STRUCTURE_SET:
         file.save(os.path.join(current_app.config['RT_SET_FOLDER'], filename))
+        heart_contour = heart_finder(ds)
+        images, all_scans = image_counter(ds)
+        RT_SETS.append(
+            {
+                "filename": filename,
+                "patient": patient_id,
+                "study": study,
+                "series": series,
+                "file": ds,
+                "heart": heart_contour,
+                "approved_images": images,
+                "all_scans": all_scans,
+            }
+        )    
         return (f"{filename} is RT Structure Set".format(filename=filename), ds)
     file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
     return (f"{filename} is Neither an RT Structure set or a CT image".format(filename=filename), ds)
-
+ 
 
 @bp.route('/upload', methods=('GET', 'POST'))
 def upload_file():
@@ -132,10 +141,29 @@ def upload_file():
     return render_template('dicom/upload.html')
 
 
+def heart_finder(rt_set):
+    structure_set = rt_set.StructureSetROISequence
+    for roi in structure_set:
+        if roi.ROIName == 'HEART':
+            heart_index = structure_set.index(roi)
+            if heart_index:
+                contour_set = rt_set.ROIContourSequence[heart_index]
+                contour_data = contour_set.ContourSequence[heart_index].ContourData
+                return contour_data
+            
+def image_counter(rt_set):
+    contour_set = rt_set.ROIContourSequence
+    number_of_images = 0
+    for contour in contour_set:        
+        contour_data = len(contour.ContourSequence)
+        number_of_images += contour_data
+    all_scans = len(rt_set.ReferencedFrameOfReferenceSequence[0].RTReferencedStudySequence[0].RTReferencedSeriesSequence[0].ContourImageSequence)
+    return number_of_images, all_scans,
+
+
 @bp.route('/', methods = ['GET'])
 def index():
-    rt_sets = []
-    return render_template('dicom/index.html', rt_sets=rt_sets)
+    return render_template('dicom/index.html', rt_sets=RT_SETS)
 #     db = get_db()
 #     rt_sets = db.execute(
 #         'SELECT id, study, series, patient_id'
@@ -160,13 +188,14 @@ def index():
 #     return rt_structure_set
 
 
-# @bp.route('/<int:id>/file', methods = ['GET'])
-# def list_file(id):
-#     file = get_file(id)
-    
-#     # dicom_file = file['dicom_file']
-#     # file.write(dicom_file)
-#     # ds = dcmread(dicom_file)
-#     print(file[0], file[1])
+@bp.route('/file/<filename>', methods = ['GET'])
+def list_file(filename):
+    filename = filename
+    print(os.path.join(current_app.config['RT_SET_FOLDER'], filename))
+    file = dcmread(os.path.join(current_app.config['RT_SET_FOLDER'], filename), force=True)
+    print(filename, file)
+    # dicom_file = file['dicom_file']
+    # file.write(dicom_file)
+    # ds = dcmread(dicom_file)
 
-#     return render_template('dicom/list_file.html', file=file.dicom_file)
+    return render_template('dicom/list_file.html', info=filename, file=file)

@@ -1,7 +1,26 @@
 DROP TABLE IF EXISTS user;
+DROP TABLE IF EXISTS rt_structure_set;
+DROP TABLE IF EXISTS image_instance;
 
 CREATE TABLE user (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL
+);
+
+CREATE TABLE rt_structure_set (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  study TEXT UNIQUE NOT NULL,
+  series TEXT NOT NULL,
+  patient_id TEXT NOT NULL,
+  dicom_file BLOB NOT NULL
+);
+
+CREATE TABLE image_instance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  study TEXT NOT NULL,
+  series TEXT NOT NULL,
+  patient_id TEXT NOT NULL,
+  instance INTEGER UNIQUE NOT NULL,
+  dicom_file BLOB NOT NULL
 );

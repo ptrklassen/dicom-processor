@@ -8,9 +8,9 @@ from . import auth
 from . import db
 from . import dicom
 
-UPLOAD_FOLDER = join(dirname(realpath(__file__)), 'uploads/..')
-RT_SET_FOLDER = join(dirname(realpath(__file__)), 'uploads/sets/..')
-CT_IMAGE_FOLDER = join(dirname(realpath(__file__)), 'uploads/scans/..')
+UPLOAD_FOLDER = join(dirname(realpath(__file__)), 'uploads')
+RT_SET_FOLDER = join(dirname(realpath(__file__)), 'uploads/sets')
+CT_IMAGE_FOLDER = join(dirname(realpath(__file__)), 'uploads/scans')
 
 
 def create_app(test_config=None):

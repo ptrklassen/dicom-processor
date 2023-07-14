@@ -12,14 +12,16 @@
     <article class="post">
       <header>
         <div>
-          <h1>Patient ID: {{ rt_set['patient_id'] }}</h1>
+          <h1>Patient ID: {{ rt_set['patient'] }}</h1>
           <div class="about">Study Instance UID: {{ rt_set['study'] }} <br>
             Series Instance ID: {{ rt_set['series'] }}
             </div>
         </div>
-        <a class="action" href="{{ url_for('dicom.list_file', id=rt_set['id']) }}">View File</a>
+        <a class="action" href="{{ url_for('dicom.list_file', filename=rt_set['filename']) }}">View File</a>
       </header>
-      <p class="body">Organ: Heart Volume: 15cc Number of files: 45 </p>
+      <p class="body">Heart Volume: 15cc Number of approved images: {{ rt_set.images }} Total images: {{ rt_set.all_scans }}</p>
+      <p class="body">{{ rt_set.file.StructureSetROISequence }}</p>
+      <p class="body">{{ rt_set.heart }}</p>
     </article>
     {% if not loop.last %}
       <hr>
