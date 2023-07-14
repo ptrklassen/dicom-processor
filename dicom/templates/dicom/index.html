@@ -19,8 +19,8 @@
         </div>
         <a class="action" href="{{ url_for('dicom.list_file', filename=rt_set['filename']) }}">View File</a>
       </header>
-      <p class="body">Heart Volume: 15cc Number of approved images: {{ rt_set.images }} Total images: {{ rt_set.all_scans }}</p>
-      <p class="body">{{ rt_set.file.StructureSetROISequence }}</p>
+      <p class="body">Heart Volume: TBD Number of approved images: {{ rt_set.approved_images }} Total images: {{ rt_set.all_scans }}</p>
+      <p class="body">{{ rt_set.patient }}</p>
       <p class="body">{{ rt_set.heart }}</p>
     </article>
     {% if not loop.last %}

@@ -16,6 +16,7 @@ ALLOWED_EXTENSIONS = {'dcm'}
 CT_IMAGE = "1.2.840.10008.5.1.4.1.1.2"
 RT_STRUCTURE_SET = "1.2.840.10008.5.1.4.1.1.481.3"
 RT_SETS = []
+PIXEL_DATA = []
 
 
 bp = Blueprint('dicom', __name__)
@@ -91,6 +92,14 @@ def process_file(file, filename):
     if hasattr(ds.file_meta, "MediaStorageSOPClassUID") and ds.file_meta.MediaStorageSOPClassUID == CT_IMAGE:
         # image instances are saved with their InstanceNumber
         # instance = ds.InstanceNumber
+        PIXEL_DATA.append(
+            {
+                "patient": patient_id,
+                "study": study,
+                "series": series,
+                "pixel_spacing": ds.PixelSpacing,
+            }
+        )
         file.save(os.path.join(current_app.config['CT_IMAGE_FOLDER'], filename))      
         return (f"{filename} is CT Image - Instance: {ds.InstanceNumber}".format(filename=filename), ds)
     if hasattr(ds.file_meta, "MediaStorageSOPClassUID") and ds.file_meta.MediaStorageSOPClassUID == RT_STRUCTURE_SET:
@@ -141,6 +150,24 @@ def upload_file():
     return render_template('dicom/upload.html')
 
 
+def heart_volume(heart_contures):
+    contour_points = []
+    for contour_data in heart_contures:
+        del contour_data[3 - 1::3]
+        # x_y_contours = []
+        area_points = []
+        for x in contour_data:
+            i = contour_data.index(x)
+            if i%2 == 0 and i+3 < len(contour_data):
+                result = ((contour_data[i] * contour_data[i+3]) - (contour_data[i+2] * contour_data[i+1]))/2
+                area_points.append(result)
+        
+        contour_points.append(sum(area_points))
+    return sum(contour_points)
+
+
+
+#find the index of the heart ROI and return the pixel volume of the heart
 def heart_finder(rt_set):
     structure_set = rt_set.StructureSetROISequence
     for roi in structure_set:
@@ -148,9 +175,13 @@ def heart_finder(rt_set):
             heart_index = structure_set.index(roi)
             if heart_index:
                 contour_set = rt_set.ROIContourSequence[heart_index]
-                contour_data = contour_set.ContourSequence[heart_index].ContourData
-                return contour_data
-            
+                heart_contours = []
+                for contour_sequence in contour_set.ContourSequence:
+                    heart_contours.append(contour_sequence.ContourData)
+                heart_x_y_contours = heart_volume(heart_contours)
+                return heart_x_y_contours
+
+
 def image_counter(rt_set):
     contour_set = rt_set.ROIContourSequence
     number_of_images = 0
@@ -158,11 +189,27 @@ def image_counter(rt_set):
         contour_data = len(contour.ContourSequence)
         number_of_images += contour_data
     all_scans = len(rt_set.ReferencedFrameOfReferenceSequence[0].RTReferencedStudySequence[0].RTReferencedSeriesSequence[0].ContourImageSequence)
-    return number_of_images, all_scans,
+    return number_of_images, all_scans
 
+
+def apply_pixel_data_to_heart_volume():
+    for set in RT_SETS:
+        if len(set["pixel_spacing"]) == 2 and set["heart"]:
+            set["heart"] = set["heart"] * set["pixel_spacing"][0] * set["pixel_spacing"][1] * 0.001
+
+
+def get_pixel_data():
+    for set in RT_SETS:
+        set["pixel_spacing"] = []
+        for data in PIXEL_DATA:
+            if set["patient"] == data["patient"] and set["pixel_spacing"] != data["pixel_spacing"]:
+                set["pixel_spacing"] = data["pixel_spacing"]
+        
 
 @bp.route('/', methods = ['GET'])
 def index():
+    get_pixel_data()
+    apply_pixel_data_to_heart_volume()
     return render_template('dicom/index.html', rt_sets=RT_SETS)
 #     db = get_db()
 #     rt_sets = db.execute(
