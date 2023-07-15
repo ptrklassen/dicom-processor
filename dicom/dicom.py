@@ -6,10 +6,8 @@ from flask import flash
 from flask import redirect
 from flask import render_template
 from flask import request
-from dicom.db import get_db
 
 from pydicom import dcmread
-from werkzeug.exceptions import abort
 from werkzeug.utils import secure_filename
 
 ALLOWED_EXTENSIONS = {'dcm'}
@@ -154,7 +152,7 @@ def image_counter(rt_set):
 def apply_pixel_data_to_heart_volume():
     for set in RT_SETS:
         if len(set["pixel_spacing"]) == 2 and set["heart"]:
-            set["heart"] = set["heart"] / set["pixel_spacing"][0] / set["pixel_spacing"][1] * 0.001
+            set["heart"] = set["heart"] / set["pixel_spacing"][0] / set["pixel_spacing"][1] * 0.001 # convert from mm3 to cm3
         # Reduce heart volume to 2 decimals
         set["heart"] = round(set["heart"], 2)
 
