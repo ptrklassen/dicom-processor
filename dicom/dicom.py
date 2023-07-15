@@ -75,7 +75,6 @@ def upload_file():
         if 'file' not in request.files:
                 flash('No file part')
                 return redirect(request.url)
-        flash("Hang in there, this may take a minute!")
         for file in data.getlist('file'):        
             file = file
             count += 1
@@ -92,21 +91,32 @@ def upload_file():
                 
     return render_template('dicom/upload.html')
 
+# Get ROI conture slice thickness
+def get_slice_thickness(roi_contours):
+    first_slice = roi_contours[0]
+    second_slice = roi_contours[1]
+    slice_thickness = first_slice[2] - second_slice[2]
+    return abs(slice_thickness)
+
+
 # Accept ROI contour data and convert to pixel volume
 def roi_volume(roi_contours):
+    # get height from contour image slices
+    contour_slice_height = get_slice_thickness(roi_contours)
+    print("contour_slice_height: ", contour_slice_height)
     contour_areas_stacked = []
-    for contour_data in roi_contours:
+    for contour_data in roi_contours:        
         # Remove z values from contour_data
         del contour_data[3 - 1::3]
-        scan_contour_area = []
+        image_contour_area = []
         for x in contour_data:
             i = contour_data.index(x)
-            # Perform cumulative polyganal area calculation at each area coordinate 
+            # Perform cumulative polygonal area calculation at each area coordinate 
             if i%2 == 0 and i+3 < len(contour_data):
                 # Area = 1/2|(x1y2-x2y1) + (x2y3-x3y2) + ... + (xn-1yn-xnyn-1) + (xny1-x1yn)|
                 result = ((contour_data[i] * contour_data[i+3]) - (contour_data[i+2] * contour_data[i+1]))/2
-                scan_contour_area.append(result)        
-        contour_areas_stacked.append(sum(scan_contour_area))
+                image_contour_area.append(result * contour_slice_height)        
+        contour_areas_stacked.append(sum(image_contour_area))
     return sum(contour_areas_stacked)
 
 
@@ -144,7 +154,7 @@ def image_counter(rt_set):
 def apply_pixel_data_to_heart_volume():
     for set in RT_SETS:
         if len(set["pixel_spacing"]) == 2 and set["heart"]:
-            set["heart"] = set["heart"] * set["pixel_spacing"][0] * set["pixel_spacing"][1] * 0.001
+            set["heart"] = set["heart"] / set["pixel_spacing"][0] / set["pixel_spacing"][1] * 0.001
         # Reduce heart volume to 2 decimals
         set["heart"] = round(set["heart"], 2)
 
